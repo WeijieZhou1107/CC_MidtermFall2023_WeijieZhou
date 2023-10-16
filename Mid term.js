@@ -4,75 +4,133 @@ let c;//Color
 let count = 1000;
 
 function setup(){
-  createCanvas (720, 720);
-  smooth(8);
-  
-  //Initialize all arrays;
-  pos = new PVector[count];
-  vel = new PVector[count];
-  acc = new PVector[count];
-  diam = new float[count];
-  c = new color[count];
-  
-  for( i=0; i<count; i++ ){
-    pos[i] = new PVector(random(width), random(height));
-    diam[i] = random(1, 5);
-    vel[i] = PVector.random2D();
-    scalar = map(diam[i], 1, 5, 5, .2);
-    vel[i].mult(scalar);
-    acc[i] = new PVector();
-    c[i] = color(random(255), random(255), random(255));
-  }
-}
 
-function draw(){
+  ArrayList <Ball> ballList;//Declare an arrayList of balls
+  PVector mouseDir;
   
-  //Update an array of balls;
-  for( i=0; i<count; i++){
+  PImage [] img;
+  
+  void setup(){
+    size(720, 720, P3D);
+    smooth(8);
+    noCursor();
+    colorMode(HSB);
+    imageMode(CENTER);
+    img = new PImage[6];
+    for(int i=0; i<img.length; i++){
+      img[i] = loadImage(i+".png");
+    }
+    
+    mouseDir = new PVector();
+    ballList = new ArrayList<Ball>();
+  }
+  
+  void draw(){
+    
+    background(255);
+    
+    mouseDir.set(mouseX-pmouseX, mouseY-pmouseY);
     
     if(mousePressed){
-      acc[i].set(mouseX-pos[i].x, mouseY-pos[i].y);
-      
-      d = acc[i].mag();
-      //d = constrain(d, 0, 360);
-      
-      acc[i].normalize();
-      acc[i].rotate(map(d, 0, 360, PI*.5, 0));
-      acc[i].mult(map(diam[i], 1, 5, .5, .05));  
-      
-    }else{
-      acc[i].set(0, 0);
+      for(int i=0; i<25; i++){
+        Ball b = new Ball(mouseX, mouseY, random(5, 50));
+        ballList.add(b);
+      }
     }
     
-    vel[i].add(acc[i]);
-    
-    //Boundary check horizontal
-    if(pos[i].x<diam[i]*.5){//Boundary Left
-      pos[i].x = diam[i]*.5;
-      vel[i].x *= -1;
-    }else if(pos[i].x>width-diam[i]*.5){//Boundary Right
-      pos[i].x = width-diam[i]*.5;
-      vel[i].x *= -1;
-    }
-    //Boundary check vertical
-    if(pos[i].y<diam[i]*.5){//Boundary Top
-      pos[i].y = diam[i]*.5;
-      vel[i].y *= -1;
-    }else if(pos[i].y>height-diam[i]*.5){//Boundary Bottom
-      pos[i].y = height-diam[i]*.5;
-      vel[i].y *= -1;
+    for(int i=ballList.size()-1; i>-1; i--){//Traverse the arrayList
+      Ball b = ballList.get(i);
+      if(b.dead){
+        ballList.remove(b);
+      }else{
+        b.update();
+      }
     }
     
-    vel[i].mult(.99);
+    for(int i=0; i<ballList.size(); i++){
+      Ball b = ballList.get(i);
+      b.display();
+    }
     
-    pos[i].add(vel[i]);//Move (Add velocity to each ball's current position)
+    //Display info
+    fill(#0000ff);
+    textSize(24);
+    text("ballList: "+ballList.size(), 50, 50);
   }
+
+
+class Ball{
   
-  //Display an array of balls;
-  background(255);
-  for( i=0; i<count; i++){
-    stroke(c[i]);
-    strokeWeight(diam[i]);
-    point(pos[i].x, pos[i].y);
+    PVector pos, vel, acc;//Position, Velocity, Acceleration
+    float diam, diamT, diamMax;//Diameter, Maximum diameter
+    color c;//Color
+    boolean dead;
+    int life, lifeSpan;
+    float friction;
+    float noiseFOfst;
+    int imgIdx;//Image index
+    
+    //Constructor
+    Ball(float x, float y, float _diamMax){
+      pos = new PVector(x, y);
+      acc = new PVector();
+      diamMax = _diamMax;
+      float scalar = map(diam, 5, 50, 1, .25)*random(.9, 1.1);
+      if(mouseDir.mag() == 0){
+        vel = PVector.random2D();
+      }else{
+        vel = new PVector(mouseDir.x, mouseDir.y);
+        vel.rotate(random(-PI*.125, PI*.125));
+      }
+      vel.mult(scalar);
+      c = color(random(255), random(128, 255), 255);//Hue, Saturation, Brightness
+      lifeSpan = round(random(60, 480));
+      friction = map(diamMax, 5, 50, .99, .85);
+      
+      noiseFOfst = random(-.1, .1);
+      imgIdx = floor(random(img.length));
+    }
+    
+    void update(){
+      updateLife();
+      updatePos();
+    }
+    
+    void updatePos(){
+      float rtt = noise(
+        pos.x*.005+noiseFOfst+frameCount*.005,
+        pos.y*.005+noiseFOfst+frameCount*.005)*PI*4;
+        
+      acc.set(cos(rtt), sin(rtt));
+      acc.mult(.25);
+      vel.add(acc);
+      vel.mult(friction);
+      pos.add(vel);
+      boundaryCheck();
+    }
+    
+    void updateLife(){
+      if(life<lifeSpan) life++;
+      else dead = true;
+      diam = lerp(diam, diamT, .125);
+      diamT = map(life, 0, lifeSpan, diamMax, 0); 
+    }
+    
+    void boundaryCheck(){
+      if(pos.x < -diam*.5 || pos.x > width+diam*.5 || //Horizontal check
+         pos.y < -diam*.5 || pos.y > height+diam*.5){//Vertical check
+        dead = true;
+      }
+    }
+    
+    void display(){
+      //stroke(c);
+      //strokeWeight(diam);
+      //point(pos.x, pos.y);
+      pushMatrix();
+      translate(pos.x, pos.y);
+      rotate(vel.heading()+PI*.5);
+      image(img[imgIdx], 0, 0, diam, diam);
+      popMatrix();
+    }
   }
-}
